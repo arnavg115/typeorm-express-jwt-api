@@ -1,10 +1,12 @@
-import {Arg, Ctx, Field, Mutation, ObjectType, Query, Resolver, UseMiddleware} from "type-graphql"
+import {Arg, Ctx, Field, Int, Mutation, ObjectType, Query, Resolver, UseMiddleware} from "type-graphql"
 import { User } from "./entity/User"
 import {hash, compare} from "bcryptjs"
 
 import { MyContext } from "./MyContext"
 import { createAccessToken, createRefreshToken } from "./auth"
 import { isAuth } from "./isAuth"
+import { sendRefreshToken } from "./sendRefreshToken"
+import { getConnection } from "typeorm"
 
 
 @ObjectType()
@@ -16,10 +18,12 @@ class LoginResponse {
 
 @Resolver()
 export  class UserResolver{
+
     @Query(()=> String)
     hello(){
         return "hi!"
     }
+
     @Query(()=>String)
     @UseMiddleware(isAuth)
     bye(
@@ -28,9 +32,9 @@ export  class UserResolver{
         return `your user id is ${payload?.userId}`
     }
 
-    @Query(()=> [User])
-    users(){
-        return User.find()
+    @Query(() => [User])
+    users() {
+        return User.find();
     }
 
     @Mutation( ()=> Boolean)
@@ -52,6 +56,7 @@ export  class UserResolver{
         }
 
     }
+    
     @Mutation( ()=> LoginResponse)
     async login(
         @Arg('email') email: string, 
@@ -69,7 +74,8 @@ export  class UserResolver{
         if(! valid){
             throw new Error("incorrect password")
         }
-        res.cookie('jid',createRefreshToken(user) ,{httpOnly:true})
+        
+        sendRefreshToken(res, createRefreshToken(user))
 
 
         return {
@@ -78,4 +84,12 @@ export  class UserResolver{
 
     }
 
+    @Mutation(()=> Boolean)
+    async revokeRefreshTokensForUser(
+        @Arg('userId', ()=>Int) userId:number
+    ){
+        await getConnection().getRepository(User).increment({id:userId}, 'tokenVersion', 1)
+        return true;
+    }
+    
 }
